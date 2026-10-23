@@ -25,6 +25,7 @@ from fontTools.ttLib import TTFont
 # ───────────────────────── НАСТРОЙКИ ─────────────────────────
 
 HANDLE = "vi5vi5vi5"
+TELEGRAM = "vi5vi5vi5"            # ник без @, попадает в штамп шапки
 NAME = "Vi5"                       # крупная надпись в шапке
 ROLE = "backend-разработчик"
 FOCUS = "сетевые сервисы · realtime · self-hosted"
@@ -254,12 +255,13 @@ def stream(inbound, outbound, fill, dur=2.4, waves=3, size=9):
     return "".join(out)
 
 
-def stamp(doc, cx, cy, big, small, angle=-8):
+def stamp(doc, cx, cy, big, small, angle=-8, scale=1):
     """Печать: двойная рамка, поворот, полупрозрачность."""
     t = doc.t
     a = t["accent"]
     w, h = 118, 58
-    return (f'<g transform="rotate({angle} {cx} {cy})" opacity="0.88">'
+    zoom = f" translate({cx} {cy}) scale({scale}) translate({-cx} {-cy})" if scale != 1 else ""
+    return (f'<g transform="rotate({angle} {cx} {cy}){zoom}" opacity="0.88">'
             + rect(cx - w / 2, cy - h / 2, w, h, a, 2, rx=6)
             + rect(cx - w / 2 + 4, cy - h / 2 + 4, w - 8, h - 8, a, 0.9, rx=4)
             + doc.text(big, cx, cy + 5, 24, "x", a, "middle")
@@ -276,6 +278,14 @@ def mini_block(doc, x2, y2, code, sheet_no):
             line(mid, y1, mid, y2, t["ink"], 0.9),
             doc.text(code, (x1 + mid) / 2, y1 + 22, 14, "b", t["ink"], "middle"),
             doc.text(f"Лист {sheet_no}", (mid + x2) / 2, y1 + 22, 13, "i", t["muted"], "middle"))
+
+
+def capture(d, fn):
+    """Нарисовать fn(d) в отдельный фрагмент, чтобы потом сдвинуть или увеличить его."""
+    saved, d.body = d.body, []
+    fn(d)
+    part, d.body = "".join(d.body), saved
+    return part
 
 
 # ─────────────────────────── ШАПКА ───────────────────────────
@@ -355,7 +365,7 @@ def header(t):
           line(xc, 406, x2, 406, ink, 0.8), line(xc, 424, x2, 424, ink, 0.8))
     for i in (1, 2):
         d.add(line(xc + 50 * i, 388, xc + 50 * i, 424, ink, 0.8))
-    meta = [("Разраб.", NAME), ("Профиль", "backend"), ("Стек", "C++ · Py"), ("Учу", LEARNING)]
+    meta = [("Разраб.", NAME), ("Связь", "@" + TELEGRAM), ("Стек", "C++ · Py"), ("Учу", LEARNING)]
     for (lab, val), y in zip(meta, rows):
         d.add(d.text(lab, x1 + 7, y + 19, 12, "i", mu),
               d.text(val, xa + 8, y + 20, 14, "r", ac if lab == "Учу" else ink))
@@ -381,12 +391,10 @@ def card_base(t, title, sheet_no, name, sub):
     return d
 
 
-def card_ferry(t):
-    ink, mu, ac = t["ink"], t["muted"], t["accent"]
-    d = card_base(t, "Ferry — релей больших файлов без хранения, со сквозным шифрованием",
-                  2, "Ferry", "релей больших файлов без хранения")
-    d.add(stamp(d, 500, 76, "E2E", "0 B на диске"))
-
+def ferry_strip(d):
+    """Поток чанков через окно в оперативке релея (координаты карточки)."""
+    t = d.t
+    mu, ac = t["muted"], t["accent"]
     # Поток чанков через окно в оперативке релея.
     L, R, y0, pitch, cs = 40, 560, 196, 28, 20
     wx1, wx2 = 232, 372
@@ -405,6 +413,15 @@ def card_ferry(t):
           d.text("к получателям", R, y0 - 20, 13, "i", mu, "end"))
     dim_h(d, wx1, wx2, y0 + cs + 26, "на диск не пишется", ext_from=y0 + cs + 12, size=13)
 
+
+def card_ferry(t):
+    ink, mu, ac = t["ink"], t["muted"], t["accent"]
+    d = card_base(t, "Ferry — релей больших файлов без хранения, со сквозным шифрованием",
+                  2, "Ferry", "релей больших файлов без хранения")
+    d.add(stamp(d, 500, 76, "E2E", "0 B на диске"))
+
+    d.add(capture(d, ferry_strip))
+
     # Почему не P2P.
     d.add(d.text("скорость у каждого из N получателей", 40, 300, 13, "i", mu),
           d.text("P2P", 40, 328, 16, "r", mu),
@@ -418,12 +435,10 @@ def card_ferry(t):
     return d
 
 
-def card_meetup(t):
+def meetup_room(d):
+    """Комната: четыре участника вокруг релея (координаты карточки)."""
+    t = d.t
     ink, mu, ac = t["ink"], t["muted"], t["accent"]
-    d = card_base(t, "MeetUp — видеозвонки на своём сервере, со сквозным шифрованием",
-                  3, "MeetUp", "видеозвонки на своём сервере")
-    d.add(stamp(d, 500, 76, "LIVE", "демо онлайн", angle=6))
-
     # Комната: четыре участника вокруг релея.
     pw, ph = 110, 40
     parts = [(40, 158, "браузер"), (40, 226, "Windows"), (450, 158, "телефон"), (450, 226, "браузер")]
@@ -466,6 +481,15 @@ def card_meetup(t):
     d.add(stream(inbound, outs, ac, size=8))
     d.add(d.text("шифротекст", rx + rw / 2, ry - 12, 13, "i", ac, "middle"))
 
+
+def card_meetup(t):
+    ink, mu, ac = t["ink"], t["muted"], t["accent"]
+    d = card_base(t, "MeetUp — видеозвонки на своём сервере, со сквозным шифрованием",
+                  3, "MeetUp", "видеозвонки на своём сервере")
+    d.add(stamp(d, 500, 76, "LIVE", "демо онлайн", angle=6))
+
+    d.add(capture(d, meetup_room))
+
     d.add(d.text("сервер пересылает кадры, не заглядывая внутрь", 40, 300, 13, "i", mu),
           d.text("H.264 / VP8 / VP9 · Opus · AES-256-GCM", 40, 328, 15, "r", ink),
           d.text("демо → meetup.fferry.ru", 40, 356, 15, "b", ac))
@@ -473,6 +497,73 @@ def card_meetup(t):
     d.add(d.text("C++20 · Qt6 · React · WebCodecs · ffmpeg", 40, 392, 12.5, "r", mu))
     mini_block(d, 586, 406, "MEETUP.001", 3)
     return d
+
+
+# ────────────────── ОБЛОЖКИ РЕПОЗИТОРИЕВ (1280×640) ─────────────────
+# Settings → General → Social preview. GitHub принимает PNG/JPG,
+# поэтому main() дополнительно рендерит их в PNG, если стоит playwright.
+
+def cover_base(t, title, name, lines, stamp_args):
+    d = Doc(1280, 640, t, title)
+    sheet(d, left=48, m=20)
+    d.add(d.text(f"ЛИСТ · {name.upper()} · ОБЛОЖКА", 90, 82, 17, "i", t["muted"]),
+          d.text(name, 82, 200, 140, "x", t["ink"]))
+    for i, (s, f, color) in enumerate(lines):
+        d.add(d.text(s, 92, 258 + i * 38, 28, f, t[color]))
+    d.add(stamp(d, *stamp_args, scale=1.7))
+    return d
+
+
+def cover_facts(d, facts, y=560):
+    """Нумерованные выноски внизу листа."""
+    t = d.t
+    x = 92
+    for n, s in enumerate(facts, 1):
+        d.add(f'<circle cx="{x + 13}" cy="{y - 6}" r="14" fill="none" stroke="{t["accent"]}" stroke-width="1.8"/>',
+              d.text(str(n), x + 13, y + 0.5, 17, "b", t["accent"], "middle"),
+              d.text(s, x + 38, y, 18, "r", t["ink"]))
+        x += 38 + tw(s, 18) + 34
+
+
+def cover_ferry(t):
+    d = cover_base(t, "Ferry — паром для файлов: релей без хранения, со сквозным шифрованием", "Ferry",
+                   [("паром для файлов. перевёз и ушёл.", "r", "ink")],
+                   (1110, 130, "E2E", "0 B на диске", -8))
+    d.add(f'<g transform="translate(30 -36) scale(2)">{capture(d, ferry_strip)}</g>')
+    cover_facts(d, ["0 байт на диске сервера", "ключ живёт только в ссылке", "1 отдача → N получателей"])
+    d.add(d.text(f"github.com/{HANDLE}/Ferry", 92, 606, 15, "i", t["muted"]))
+    mini_block(d, 1248, 608, "FERRY.001", 2)
+    return d
+
+
+def cover_meetup(t):
+    d = cover_base(t, "MeetUp — видеозвонки на своём сервере, со сквозным шифрованием", "MeetUp",
+                   [("говорите свободно.", "r", "ink")],
+                   (1110, 130, "LIVE", "демо онлайн", 6))
+    d.add(f'<g transform="translate(110 30) scale(1.75)">{capture(d, meetup_room)}</g>')
+    cover_facts(d, ["шифрование на устройстве", "вход без телефона и почты", "сервер одной командой"])
+    d.add(d.text(f"github.com/{HANDLE}/MeetUp · демо: meetup.fferry.ru", 92, 606, 15, "i", t["muted"]))
+    mini_block(d, 1248, 608, "MEETUP.001", 3)
+    return d
+
+
+def export_png(paths):
+    """SVG → PNG для обложек. Нужен `pip install playwright && playwright install chromium`."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("playwright не установлен: PNG обложек не собраны (SVG лежат в assets/covers/)")
+        return
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": 1280, "height": 640})
+        for svg in paths:
+            pg.goto("file://" + svg)
+            pg.wait_for_timeout(1300)  # кадр, где пакеты уже в пути
+            png = svg[:-4] + ".png"
+            pg.screenshot(path=png, clip={"x": 0, "y": 0, "width": 1280, "height": 640})
+            print(f"{os.path.relpath(png, ROOT):32} {os.path.getsize(png) // 1024:4} КБ")
+        b.close()
 
 
 # ──────────────────────── СПЕЦИФИКАЦИЯ ───────────────────────
@@ -524,13 +615,20 @@ def spec(t):
 def main():
     os.makedirs(OUT, exist_ok=True)
     builders = {"header": header, "card-ferry": card_ferry, "card-meetup": card_meetup, "spec": spec}
+    covers = {"cover-ferry": cover_ferry, "cover-meetup": cover_meetup}
+    os.makedirs(os.path.join(OUT, "covers"), exist_ok=True)
+    cover_files = []
     for theme, t in THEMES.items():
-        for name, fn in builders.items():
+        for name, fn in {**builders, **covers}.items():
             svg = fn(t).render()
-            p = os.path.join(OUT, f"{name}-{theme}.svg")
+            sub = "covers" if name in covers else ""
+            p = os.path.join(OUT, sub, f"{name}-{theme}.svg")
             with open(p, "w", encoding="utf-8") as f:
                 f.write(svg)
+            if sub:
+                cover_files.append(p)
             print(f"{os.path.relpath(p, ROOT):32} {len(svg.encode()) // 1024:4} КБ")
+    export_png(cover_files)
 
 
 if __name__ == "__main__":

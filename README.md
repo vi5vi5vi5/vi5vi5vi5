@@ -39,8 +39,6 @@
   </picture>
 </p>
 
-<!-- Впиши свои контакты и раскомментируй строку:
 <p align="center">
-  <a href="https://t.me/ТВОЙ_НИК">Telegram</a> · <a href="mailto:ТВОЯ_ПОЧТА">почта</a>
+  <a href="https://t.me/vi5vi5vi5">Telegram @vi5vi5vi5</a> · <a href="https://meetup.fferry.ru">демо MeetUp</a>
 </p>
--->
